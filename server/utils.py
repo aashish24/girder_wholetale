@@ -5,8 +5,6 @@ from girder.models.folder import Folder
 from girder.constants import AccessType
 from girder.api.rest import RestException
 
-from .dataone_register import find_initial_pid
-
 
 def getOrCreateRootFolder(name):
     collection = ModelImporter.model('collection').createCollection(
@@ -31,14 +29,13 @@ def get_tale_artifacts(tale, user):
     :return: A list of items that are in the folder
     :rtype list(girder.models.Item)
     """
-    logger.debug('Entered get_tale_artifacts')
+
     folder = Folder().load(
         id=tale['folderId'],
         user=user,
         level=AccessType.READ,
         exc=True)
     child_items = Folder().childItems(folder=folder)
-    logger.debug('Leaving get_tale_artifacts')
     return child_items
 
 
@@ -53,20 +50,19 @@ def get_file_item(item_id, user):
     :return: The file object or None
     :rtype: girder.models.file
     """
-    logger.debug('Entered get_file_item')
+
     doc = Item().load(item_id, level=AccessType.ADMIN, user=user)
 
     if doc is None:
-        logger.debug('Failed to load Item. Leaving get_file_item')
+        logger.warning('Failed to load item {}. Leaving get_file_item'.format(str(item_id)))
         return None
     child_files = Item().childFiles(doc)
 
     if bool(child_files):
         # We follow a rule of there only being one file per item, so return the 0th element
-        logger.debug('Leaving get_file_item')
         return child_files[0]
 
-    logger.debug('Failed to find a file. Leaving get_file_item')
+    logger.warning('Failed to find a file for item {}. Leaving get_file_item'.format(str(item_id)))
     return None
 
 
@@ -81,21 +77,10 @@ def get_file_format(item_id, user):
     :return: The file's extension
     :rtype: str
     """
-    logger.debug('Entered get_file_format')
-    doc = Item().load(item_id, level=AccessType.ADMIN, user=user)
 
-    if doc is None:
-        logger.debug('Failed to load Item. Leaving get_file_item')
-        return None
-    child_files = Item().childFiles(doc)
-
-    if bool(child_files):
-        # We follow a rule of there only being one file per item, so return the 0th element
-        logger.debug('Leaving get_file_item')
-        return child_files[0].get('mimeType', '')
-
-    logger.debug('Failed to find a file. Leaving get_file_format')
-    return None
+    file = get_file_item(item_id, user)
+    if file is not None:
+        return file.get('mimeType', '')
 
 
 def get_tale_description(tale):
@@ -128,7 +113,7 @@ def get_dataone_url(item_id, user):
     :return: The object's path in DataONE, None otherwise
     :rtype: str, None
     """
-    logger.debug('Entered check_in_dataone')
+
     file = get_file_item(item_id, user)
     if file is None:
         file_error = 'Failed to find the file with ID {}'.format(item_id)
@@ -137,11 +122,7 @@ def get_dataone_url(item_id, user):
     url = file.get('linkUrl')
     if url is not None:
         if url.find('dataone.org'):
-            logger.debug('Leaving check_in_dataone')
             return url
-
-    logger.debug('Leaving check_in_dataone')
-    return None
 
 
 def check_pid(pid):
@@ -155,13 +136,10 @@ def check_pid(pid):
     :return: Returns the pid as a str, or just the pid if it was already a str
     :rtype: str
     """
-    logger.debug('Entered check_pid')
+
     if not isinstance(pid, str):
-        logger.debug('Warning: PID was passed that is not a str')
-        logger.debug('Leaving check_pid')
         return str(pid)
     else:
-        logger.debug('Leaving check_pid')
         return pid
 
 
@@ -181,36 +159,18 @@ def get_remote_url(item_id, user):
         return url
 
 
-def filter_items(item_ids, user):
+def get_tale_files(tale, user):
     """
-    Take a list of item ids and determine whether it:
-       1. Exists on the local file system
-       2. Exists on DataONE
-       3. Is linked to a remote location other than DataONE
-
-    :param item_ids: A list of items to be processed
-    :param user: The user that is requesting the package creation
-    :type item_ids: list
+    Gets the tale artifacts and creates a list of files.
+    :param tale: The tale whose artifacts are being extracted
+    :param user: The user that is requesting the artifacts
+    :type tale: wholetale.models.Tale
     :type user: girder.models.User
-    :return: A dictionary of lists for each file location
-    :rtype: dict
+    :return: A list of the files
+    :rtype list
     """
-
-    logger.debug('Entered filter_input_items')
-    dataone_objects = list()
-    remote_objects = list()
-    local_objects = list()
-
-    for item_id in item_ids:
-        # Check if it points do a file on DataONE
-        url = get_dataone_url(item_id, user)
-        if url is not None:
-            dataone_objects.append(find_initial_pid(url))
-            continue
-
-        # If the file wasn't linked to a remote location, then it must exist locally. This
-        # is a list of girder.models.File objects
-        local_objects.append(get_file_item(item_id, user))
-
-    logger.debug('Leaving filter_input_items')
-    return {'dataone': dataone_objects, 'remote': remote_objects, 'local': local_objects}
+    artifact_items = get_tale_artifacts(tale, user)
+    files = list()
+    for item in artifact_items:
+        files.append(get_file_item(item['_id'], user))
+    return files
