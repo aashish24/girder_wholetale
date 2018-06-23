@@ -51,7 +51,7 @@ def get_file_item(item_id, user):
     :rtype: girder.models.file
     """
 
-    doc = Item().load(item_id, level=AccessType.ADMIN, user=user)
+    doc = Item().load(item_id, level=AccessType.READ, user=user)
 
     if doc is None:
         logger.warning('Failed to load item {}. Leaving get_file_item'.format(str(item_id)))
